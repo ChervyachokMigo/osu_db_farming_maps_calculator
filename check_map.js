@@ -17,12 +17,17 @@ module.exports = {
 
     get_beatmap_info: async function(beatmapsetid){
         try{
-            return await v2.beatmap.set(beatmapsetid).catch(reason=> { return reason; });
+            return new Promise(async resolve => {
+
+            
+            let beatmap_info = await v2.beatmap.set(beatmapsetid).then(result=>{
+                resolve(result)
+            }).catch(reason => { resolve(reason.toString()); });
+            });
         }
         catch (e){
             console.log(e);
-            await new Promise(resolve => setTimeout(resolve, osu_api_error_restart_ms));
-            throw new Error('error beatmap');
+            return new Error('error beatmap');            
         }
     },
 }

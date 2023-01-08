@@ -259,7 +259,7 @@ module.exports = {
 				}
 				if (this.debug == 1) log ({String: res,Length:stringLength})
 				return res
-		}else {
+		} else {
 			if (this.debug == 1) log ('error read string')
 			return ''
 		}

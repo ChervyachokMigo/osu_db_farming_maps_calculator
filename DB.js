@@ -27,7 +27,9 @@ const beatmapset_data = mysql.define ('beatmap_data', {
 
     gamemode: { type: DataTypes.STRING, defaultValue: 'std'},
 
-    ranked: { type: DataTypes.INTEGER, defaultValue: 0 }
+    ranked: { type: DataTypes.INTEGER, defaultValue: 0 },
+
+    md5: { type: DataTypes.STRING, defaultValue: ''},
 });
 
 

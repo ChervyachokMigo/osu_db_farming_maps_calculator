@@ -61,9 +61,12 @@ async function startParsingDB(){
         osu_db.beatmaps = [];
         for (let i = 0; i < osu_db.number_beatmaps; i++){
 
-            osu_db.beatmaps.push (await parsingBeatmapData());
+            let beatmap = await parsingBeatmapData();
+            if (beatmap.gamemode == 1){
+                osu_db.beatmaps.push (beatmap);
+            }
 
-            if (i%1000==0){
+            if (i%150==0){
                 console.log('Парсинг osu.db: ', Math.trunc ( i / osu_db.number_beatmaps * 1000 ) / 10, '%');
             }
         }
@@ -123,12 +126,12 @@ async function parsingBeatmapData(){
     beatmap.slider_velocity = await osufile.skipDouble();
 
     if (osu_db.osu_version>=20140609){
-        let std = await osufile.getIntDoublePair();
+        let std = await osufile.skipIntDoublePair();
         let taiko = await osufile.getIntDoublePair();
-        let ctb = await osufile.getIntDoublePair();
-        let mania = await osufile.getIntDoublePair();
+        let ctb = await osufile.skipIntDoublePair();
+        let mania = await osufile.skipIntDoublePair();
         beatmap.SRs = {
-            std, taiko, ctb, mania
+            taiko
         }
     }
 

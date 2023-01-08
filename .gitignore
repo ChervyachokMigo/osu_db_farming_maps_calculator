@@ -3,3 +3,4 @@ osu-beatmaps-bancho-datebase.code-workspace
 config.js
 *.json
 /node_modules
+farm_collection_.db

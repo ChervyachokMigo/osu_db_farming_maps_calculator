@@ -4,36 +4,60 @@ const { prepareDB, MYSQL_GET_ONE, MYSQL_SAVE , beatmapset_data, MYSQL_DELETE } =
 const { init_osu_db, get_beatmaps_by_mode_and_star } = require('./osu_db.js');
 const { beatmap_modes } = require("./consts.js");
 const  fs = require('fs');
-
+const { buff2int } = require('./osu_reader_functions.js');
 
 var farming_maps;
 
 var skip = true;
 
 async function get_laser_stars(){
-    let beatmaps_local = get_beatmaps_by_mode_and_star('taiko', 4, 10);
+    let beatmaps_local = get_beatmaps_by_mode_and_star('taiko', 0, 10);
     for (let beatmap_local of beatmaps_local){
         
-        /*if (skip == true && beatmap_local.artist.toLowerCase().startsWith('y')){
+        /*if (skip == true && beatmap_local.artist.toLowerCase().startsWith('na')){
             skip = false;
         }
         if (skip == true){
             continue
         }*/
+
         if (beatmap_modes[beatmap_local.gamemode] !== 'taiko' || 
             Number(beatmap_local.beatmapsetID) == 4294967295||
             Number(beatmap_local.beatmapsetID) <= 0){
                 console.log('delete', beatmap_local.beatmapID, beatmap_local.artist, beatmap_local.title)
-                await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
+                try{
+                    await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
+                } catch (e){
+                    console.log(e)
+                }
             continue;
         }
 
         //console.log('существует ли карта в базе ', beatmap_local.beatmapsetID)
         let stored_beatmap_data = await MYSQL_GET_ONE(beatmapset_data, {beatmapset_id: Number(beatmap_local.beatmapsetID)});
-        
-        if (stored_beatmap_data == false || stored_beatmap_data.ranked == 0 ){
-           // console.log('получаем информацию с банчо о ',beatmap_local.beatmapsetID)
-            let bancho_beatmapset = await get_beatmap_info(beatmap_local.beatmapsetID);
+        if( stored_beatmap_data.ranked == 0 ){
+           /* console.log('delete', beatmap_local.beatmapID, beatmap_local.artist, beatmap_local.title)
+            try{
+                await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
+            } catch (e){
+                console.log(e)
+            }*/
+         continue;
+        }
+        if (!stored_beatmap_data){
+            console.log('получаем информацию с банчо о ',beatmap_local.beatmapsetID)
+           var bancho_beatmapset;
+           try{
+            bancho_beatmapset = await get_beatmap_info(beatmap_local.beatmapsetID);
+            
+            if (typeof bancho_beatmapset !== 'object'){
+                console.log(bancho_beatmapset)
+                throw new Error('Error')
+            }
+           } catch (e){
+            console.log(e);
+            throw new Error('Error')
+           }
             if (bancho_beatmapset.id){
                 for (let bancho_beatmap of bancho_beatmapset.beatmaps){
                     let beatmap_savedata = {
@@ -45,18 +69,27 @@ async function get_laser_stars(){
                         creator: bancho_beatmapset.creator,
                         difficulty: bancho_beatmap.version,
                         star_taiko_lazer: bancho_beatmap.difficulty_rating,
-                        ranked: bancho_beatmap.ranked
+                        ranked: bancho_beatmap.ranked,
+                        md5: bancho_beatmap.checksum
                     }
                     
                     if (beatmap_savedata.ranked <= 0){
                         console.log('delete', beatmap_savedata.beatmapID, beatmap_savedata.artist, beatmap_savedata.title)
-                        await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_savedata.beatmapID})
+                        /*try{
+                            await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
+                        } catch (e){
+                            console.log(e)
+                        }*/
                         continue;
                     }
                     
                     if (!beatmap_modes[bancho_beatmap.mode_int].startsWith('taiko')){
                         console.log('delete', beatmap_savedata.beatmapID, beatmap_savedata.artist, beatmap_savedata.title)
-                        await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_savedata.beatmapID})
+                        try{
+                            await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
+                        } catch (e){
+                            console.log(e)
+                        }
                         continue;
                     }
 
@@ -74,7 +107,7 @@ async function get_laser_stars(){
             }
 
         } else {
-            process.stdout.write (beatmap_local.beatmapsetID+' ')
+            //process.stdout.write (beatmap_local.beatmapsetID+' ')
            // console.log('скип карты ', beatmap_local.beatmapsetID)
         }
     }
@@ -111,8 +144,9 @@ async function set_local_stars(){
     console.log('Закончено')
 }
 
+/*
 async function set_local_difficulty(){
-    let beatmaps_local = get_beatmaps_by_mode_and_star('taiko', 4, 10);
+    let beatmaps_local = get_beatmaps_by_mode_and_star('taiko', 0, 10);
     for (let beatmap_local of beatmaps_local){
         if (!beatmap_local.SRs.taiko || beatmap_local.SRs.taiko.length == 0) {
             continue
@@ -124,7 +158,7 @@ async function set_local_difficulty(){
         }
     }
     console.log('Закончено')
-}
+}*/
 
 async function recalculate_farming_maps(start_star = 0, end_star = 10){
     let beatmaps_local = get_beatmaps_by_mode_and_star('taiko', start_star, end_star);
@@ -162,9 +196,11 @@ async function recalculate_farming_maps(start_star = 0, end_star = 10){
 
 function read_farming_maps(stars_min = 0, stars_max = 10, strength_min = -99, strength_max = 99){
     var finded_maps = farming_maps.filter(val=> {
-        return val.beatmap_star_local > stars_min && val.beatmap_star_local < stars_max &&
-            val.star_difference > strength_min && val.star_difference < strength_max
+        return val.beatmap_data.ranked == 1 && val.beatmap_star_local >= stars_min && val.beatmap_star_local <= stars_max &&
+            val.star_difference >= strength_min && val.star_difference <= strength_max
     });
+    return finded_maps;
+
     if (finded_maps.length>0){
         for (let map of finded_maps){
             console.log(map.beatmap_data.artist, map.beatmap_data.title)
@@ -211,6 +247,93 @@ async function initialize(){
     //read_farming_maps(4.3, 5.2, 0.2); //test
 }
 
+async function create_collections(){
+    load_farming_maps();
+
+    var maps = [
+        read_farming_maps(0, 10, -10, -0.2),    //'taiko_maps_useless', 
+        read_farming_maps(0, 10, -0.2, 0),  //'taiko_maps_low', 
+        read_farming_maps(0, 10, 0, 0.2),   //'taiko_maps_middle',
+        read_farming_maps(0, 10, 0.2, 0.4), //'taiko_maps_farm_1', 
+        read_farming_maps(0, 10, 0.4, 0.6), //'taiko_maps_farm_2', 
+        read_farming_maps(0, 10, 0.6, 10)   //'taiko_maps_farm_extra'
+    ];
+
+    const collections_names = [
+        'taiko_maps_useless', 
+        'taiko_maps_low', 
+        'taiko_maps_middle',
+        'taiko_maps_farm_1', 
+        'taiko_maps_farm_2', 
+        'taiko_maps_farm_extra'
+    ];
+    
+    var new_collection = fs.openSync('new_collection.db', 'w');    
+    
+    var buf = Buffer.alloc(8);
+
+    //write osu version
+    buf.writeUInt32LE(0x20230108, cursor_offset);
+    cursor_offset += 4;
+
+     // write count of collections
+    buf.writeUInt32LE(6, cursor_offset);
+    cursor_offset += 4;
+
+    for (let i = 0; i < 6; i++){
+        //write uleb string name of collection
+        buf = Buffer.concat([buf, getBufferFromULEB128String(collections_names[i])]);
+
+        //write count of maps
+        let maps_count = Buffer.alloc(4);
+        maps_count.writeUint32LE(maps[i].length);
+        cursor_offset += 4;
+        buf = Buffer.concat([buf, maps_count]);
+
+        //write maps md5 strings
+        for (let m in maps[i]){
+            buf = Buffer.concat([buf, getBufferFromULEB128String(maps[i][m].beatmap_data.md5)]);
+        }
+
+    }
+
+    fs.writeSync(new_collection, buf);
+    fs.closeSync(new_collection);
+    await new Promise(resolve => setTimeout(resolve, 30000));
+}
+
+function getBufferFromULEB128String(text){
+    cursor_offset += 2 + text.length;
+    let buf = Buffer.alloc(2 + text.length);
+    buf.writeUint8(11, 0);    
+    buf.writeUint8(encodeSignedLeb128FromInt32(text.length)[0], 1);
+    buf.write(text, 2 ,'utf8')
+    return buf;
+}
+
+var cursor_offset = 0;
+
+const encodeSignedLeb128FromInt32 = (value) => {
+    value |= 0;
+    const result = [];
+    while (true) {
+      const byte_ = value & 0x7f;
+      value >>= 7;
+      if (
+        (value === 0 && (byte_ & 0x40) === 0) ||
+        (value === -1 && (byte_ & 0x40) !== 0)
+      ) {
+        result.push(byte_);
+        return result;
+      }
+      result.push(byte_ | 0x80);
+    }
+  };
+
+
+create_collections();
+
 exports.taiko_farming_maps_initialize = initialize;
+exports.taiko_read_farming_maps = read_farming_maps;
 exports.taiko_farming_maps_recalculate_db = recalculate_db;
 exports.taiko_farming_maps_get_random_beatmap = get_random_beatmap;
