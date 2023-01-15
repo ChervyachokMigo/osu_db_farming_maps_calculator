@@ -226,6 +226,7 @@ function get_random_beatmap(stars_min = 0, stars_max = 10, strength_min = -99, s
 
 
 function load_farming_maps(){
+    console.log("load farming maps...");
     farming_maps = JSON.parse(fs.readFileSync('farming_maps.json'));
 }
 
@@ -247,59 +248,58 @@ async function initialize(){
     //read_farming_maps(4.3, 5.2, 0.2); //test
 }
 
-async function create_collections(){
+function create_taiko_collections_example(){
     load_farming_maps();
+    const maps = {
+        'taiko_maps_useless':   read_farming_maps(0, 10, -10, -0.2),
+        'taiko_maps_low':       read_farming_maps(0, 10, -0.2, 0),
+        'taiko_maps_middle':    read_farming_maps(0, 10, 0, 0.2),
+        'taiko_maps_farm_1':    read_farming_maps(0, 10, 0.2, 0.4),
+        'taiko_maps_farm_2':    read_farming_maps(0, 10, 0.4, 0.6),
+        'taiko_maps_farm_extra': read_farming_maps(0, 10, 0.6, 10)
+    };
 
-    var maps = [
-        read_farming_maps(0, 10, -10, -0.2),    //'taiko_maps_useless', 
-        read_farming_maps(0, 10, -0.2, 0),  //'taiko_maps_low', 
-        read_farming_maps(0, 10, 0, 0.2),   //'taiko_maps_middle',
-        read_farming_maps(0, 10, 0.2, 0.4), //'taiko_maps_farm_1', 
-        read_farming_maps(0, 10, 0.4, 0.6), //'taiko_maps_farm_2', 
-        read_farming_maps(0, 10, 0.6, 10)   //'taiko_maps_farm_extra'
-    ];
+    create_collections_with_stream(maps, 'new_collection.db');
 
-    const collections_names = [
-        'taiko_maps_useless', 
-        'taiko_maps_low', 
-        'taiko_maps_middle',
-        'taiko_maps_farm_1', 
-        'taiko_maps_farm_2', 
-        'taiko_maps_farm_extra'
-    ];
-    
-    var new_collection = fs.openSync('new_collection.db', 'w');    
-    
-    var buf = Buffer.alloc(8);
+}
 
-    //write osu version
-    buf.writeUInt32LE(0x20230108, cursor_offset);
-    cursor_offset += 4;
+function create_collections_with_stream(maps, filepath){
 
-     // write count of collections
-    buf.writeUInt32LE(6, cursor_offset);
-    cursor_offset += 4;
+    var maps_keys = Object.keys(maps);
 
-    for (let i = 0; i < 6; i++){
+    var stream = fs.createWriteStream(filepath, 'binary');
+
+    writeUInt32LE(stream, 0x20230108);
+    writeUInt32LE(stream, maps_keys.length );
+
+    for (let i = 0; i < maps_keys.length ; i++){
+        console.log(maps[maps_keys[i]])
         //write uleb string name of collection
-        buf = Buffer.concat([buf, getBufferFromULEB128String(collections_names[i])]);
-
+        stream.write( 
+            getBufferFromULEB128String( 
+                maps_keys[i]
+            )
+        );
+        
         //write count of maps
-        let maps_count = Buffer.alloc(4);
-        maps_count.writeUint32LE(maps[i].length);
-        cursor_offset += 4;
-        buf = Buffer.concat([buf, maps_count]);
-
+        writeUInt32LE(stream, maps[maps_keys[i]].length);
+        
         //write maps md5 strings
-        for (let m in maps[i]){
-            buf = Buffer.concat([buf, getBufferFromULEB128String(maps[i][m].beatmap_data.md5)]);
+        for (let m in maps[maps_keys[i]]){
+            stream.write(getBufferFromULEB128String(maps[maps_keys[i]][m].beatmap_data.md5));
         }
-
     }
 
-    fs.writeSync(new_collection, buf);
-    fs.closeSync(new_collection);
-    await new Promise(resolve => setTimeout(resolve, 30000));
+    stream.close();
+
+    console.log('collection created successfully');
+
+}
+
+function writeUInt32LE(stream, value){
+    var buf = Buffer.alloc(4);
+    buf.writeUInt32LE(value)
+    stream.write(buf);
 }
 
 function getBufferFromULEB128String(text){
@@ -328,10 +328,10 @@ const encodeSignedLeb128FromInt32 = (value) => {
       }
       result.push(byte_ | 0x80);
     }
-  };
+};
 
 
-create_collections();
+create_taiko_collections_example();
 
 exports.taiko_farming_maps_initialize = initialize;
 exports.taiko_read_farming_maps = read_farming_maps;

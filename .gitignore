@@ -4,3 +4,4 @@ config.js
 *.json
 /node_modules
 farm_collection_.db
+new_collection - Copy.db
