@@ -6,6 +6,8 @@ const { beatmap_modes } = require("./consts.js");
 const  fs = require('fs');
 const { buff2int } = require('./osu_reader_functions.js');
 
+const farming_maps_json = 'farming_maps.json';
+const new_connection_db = 'new_collection.db';
 var farming_maps;
 
 var skip = true;
@@ -24,6 +26,7 @@ async function get_laser_stars(){
         if (beatmap_modes[beatmap_local.gamemode] !== 'taiko' || 
             Number(beatmap_local.beatmapsetID) == 4294967295||
             Number(beatmap_local.beatmapsetID) <= 0){
+                console.log('beatmapset id undefined or equal zero');
                 console.log('delete', beatmap_local.beatmapID, beatmap_local.artist, beatmap_local.title)
                 try{
                     await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
@@ -34,30 +37,42 @@ async function get_laser_stars(){
         }
 
         //console.log('существует ли карта в базе ', beatmap_local.beatmapsetID)
-        let stored_beatmap_data = await MYSQL_GET_ONE(beatmapset_data, {beatmapset_id: Number(beatmap_local.beatmapsetID)});
-        if( stored_beatmap_data.ranked == 0 ){
+        let stored_beatmap_data = await MYSQL_GET_ONE(beatmapset_data, {beatmapset_id: beatmap_local.beatmapsetID});
+
+        //if( stored_beatmap_data.ranked == 0 ){
            /* console.log('delete', beatmap_local.beatmapID, beatmap_local.artist, beatmap_local.title)
             try{
                 await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
             } catch (e){
                 console.log(e)
             }*/
-         continue;
-        }
+        //continue;
+        //}
+
         if (!stored_beatmap_data){
             console.log('получаем информацию с банчо о ',beatmap_local.beatmapsetID)
-           var bancho_beatmapset;
-           try{
-            bancho_beatmapset = await get_beatmap_info(beatmap_local.beatmapsetID);
-            
-            if (typeof bancho_beatmapset !== 'object'){
-                console.log(bancho_beatmapset)
-                throw new Error('Error')
-            }
-           } catch (e){
-            console.log(e);
-            throw new Error('Error')
-           }
+            var bancho_beatmapset;
+
+            do {
+                bancho_beatmapset = await new Promise (async (res, rej)=>{
+                    try{
+                        let beatmap_response = await get_beatmap_info(beatmap_local.beatmapsetID);
+                
+                        if (typeof beatmap_response !== 'object'){
+                            console.log(beatmap_response)
+
+                            res(false)
+
+                        } else {
+                            res (beatmap_response)
+                        }
+                    } catch (e){
+                        console.log(e);
+                        res(false)
+                    }
+                });
+            } while ((!bancho_beatmapset || typeof bancho_beatmapset !== 'object' ));
+          
             if (bancho_beatmapset.id){
                 for (let bancho_beatmap of bancho_beatmapset.beatmaps){
                     let beatmap_savedata = {
@@ -73,17 +88,17 @@ async function get_laser_stars(){
                         md5: bancho_beatmap.checksum
                     }
                     
-                    if (beatmap_savedata.ranked <= 0){
-                        console.log('delete', beatmap_savedata.beatmapID, beatmap_savedata.artist, beatmap_savedata.title)
+                   // if (beatmap_savedata.ranked <= 0){
+                        //console.log('delete', beatmap_savedata.beatmapID, beatmap_savedata.artist, beatmap_savedata.title)
                         /*try{
                             await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
                         } catch (e){
                             console.log(e)
                         }*/
-                        continue;
-                    }
+                       // continue;
+                    //}
                     
-                    if (!beatmap_modes[bancho_beatmap.mode_int].startsWith('taiko')){
+                    /*if (!beatmap_modes[bancho_beatmap.mode_int].startsWith('taiko')){
                         console.log('delete', beatmap_savedata.beatmapID, beatmap_savedata.artist, beatmap_savedata.title)
                         try{
                             await MYSQL_DELETE(beatmapset_data,  {beatmap_id: beatmap_local.beatmapID})
@@ -91,7 +106,7 @@ async function get_laser_stars(){
                             console.log(e)
                         }
                         continue;
-                    }
+                    }*/
 
                     console.log('saving', beatmap_savedata.beatmapID, beatmap_savedata.artist, beatmap_savedata.title)
 
@@ -189,7 +204,7 @@ async function recalculate_farming_maps(start_star = 0, end_star = 10){
         }
     }
 
-    fs.writeFileSync('farming_maps.json', JSON.stringify(farming_beatmaps));
+    fs.writeFileSync(farming_maps_json, JSON.stringify(farming_beatmaps));
 
     console.log('Закончено')
 }
@@ -227,7 +242,7 @@ function get_random_beatmap(stars_min = 0, stars_max = 10, strength_min = -99, s
 
 function load_farming_maps(){
     console.log("load farming maps...");
-    farming_maps = JSON.parse(fs.readFileSync('farming_maps.json'));
+    farming_maps = JSON.parse(fs.readFileSync(farming_maps_json));
 }
 
 async function recalculate_db(){
@@ -248,7 +263,10 @@ async function initialize(){
     //read_farming_maps(4.3, 5.2, 0.2); //test
 }
 
-function create_taiko_collections_example(){
+async function create_taiko_collections_example(){
+    if (!fs.existsSync(farming_maps_json)){
+        await recalculate_db();
+    }
     load_farming_maps();
     const maps = {
         'taiko_maps_useless':   read_farming_maps(0, 10, -10, -0.2),
@@ -259,7 +277,7 @@ function create_taiko_collections_example(){
         'taiko_maps_farm_extra': read_farming_maps(0, 10, 0.6, 10)
     };
 
-    create_collections_with_stream(maps, 'new_collection.db');
+    create_collections_with_stream(maps, new_connection_db);
 
 }
 

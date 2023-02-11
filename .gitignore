@@ -5,3 +5,5 @@ config.js
 /node_modules
 farm_collection_.db
 new_collection - Copy.db
+.trash/farm_collection_ (2).db
+.trash/new_collection_.db

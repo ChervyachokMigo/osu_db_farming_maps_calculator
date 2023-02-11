@@ -14,8 +14,8 @@ const mysql = new Sequelize( DB_NAME, DB_USER, DB_PASSWORD, {
 
 const beatmapset_data = mysql.define ('beatmap_data', {
     
-    beatmap_id: { type: DataTypes.BIGINT,  unique: true },
-    beatmapset_id: { type: DataTypes.BIGINT, defaultValue: 0},
+    beatmap_id: { type: DataTypes.INTEGER,  unique: true },
+    beatmapset_id: { type: DataTypes.INTEGER, defaultValue: 0},
 
     star_taiko_local: { type: DataTypes.FLOAT,  defaultValue: 0 },
     star_taiko_lazer: { type: DataTypes.FLOAT,  defaultValue: 0 },
